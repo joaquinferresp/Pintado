@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, session
 import json
 import os
+import time
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -32,7 +33,8 @@ def is_older_than_30_days(completed_date):
 
 def generate_unique_id():
     """Generar ID único"""
-    return int(datetime.now().timestamp() * 1000000)  # Microsegundos para más unicidad
+    import time
+    return int(time.time() * 1000)  # Usar milisegundos
 
 @app.route('/')
 def index():
