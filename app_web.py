@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 app.secret_key = 'clave_secreta_parque_eolico_2025'
 
-# Archivo para tareas
-TASKS_FILE = "tareas_web.json"
+# Usar una variable global para las tareas en memoria
+# Esto evita problemas de persistencia en Render
+TASKS_GLOBAL = []
 
 # Contraseñas
 PASSWORDS = {
@@ -15,20 +16,9 @@ PASSWORDS = {
     'technician': 'tech456'
 }
 
-def load_tasks():
-    """Cargar tareas desde archivo"""
-    if os.path.exists(TASKS_FILE):
-        try:
-            with open(TASKS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-def save_tasks(tasks):
-    """Guardar tareas en archivo"""
-    with open(TASKS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(tasks, f, ensure_ascii=False, indent=2)
+def get_current_date():
+    """Obtener fecha actual en formato string"""
+    return datetime.now().strftime('%Y-%m-%d')
 
 def is_older_than_30_days(completed_date):
     """Verificar si una fecha es mayor a 30 días"""
@@ -39,6 +29,10 @@ def is_older_than_30_days(completed_date):
         return datetime.now() - completed > timedelta(days=30)
     except:
         return False
+
+def generate_unique_id():
+    """Generar ID único"""
+    return int(datetime.now().timestamp() * 1000000)  # Microsegundos para más unicidad
 
 @app.route('/')
 def index():
@@ -188,6 +182,15 @@ def index():
         }
         .form-textarea { height: 100px; resize: vertical; }
         
+        .debug-info {
+            background-color: #F3F4F6; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 4px; 
+            font-family: monospace; 
+            font-size: 12px;
+        }
+        
         @media (max-width: 768px) {
             .stats { flex-direction: column; }
             .task-actions { flex-direction: column; }
@@ -197,6 +200,9 @@ def index():
 </head>
 <body>
     <div id="app">
+        <!-- Debug info -->
+        <div id="debugInfo" class="debug-info" style="display: none;"></div>
+        
         <!-- Login Screen -->
         <div id="loginScreen" class="login-container">
             <div class="login-box">
@@ -280,36 +286,6 @@ def index():
                         <label class="form-label">Turbina</label>
                         <select id="taskTurbine" class="form-select">
                             <option value="">Seleccionar turbina</option>
-                            <option value="WTG 01">WTG 01</option>
-                            <option value="WTG 02">WTG 02</option>
-                            <option value="WTG 03">WTG 03</option>
-                            <option value="WTG 04">WTG 04</option>
-                            <option value="WTG 05">WTG 05</option>
-                            <option value="WTG 06">WTG 06</option>
-                            <option value="WTG 07">WTG 07</option>
-                            <option value="WTG 08">WTG 08</option>
-                            <option value="WTG 09">WTG 09</option>
-                            <option value="WTG 10">WTG 10</option>
-                            <option value="WTG 11">WTG 11</option>
-                            <option value="WTG 12">WTG 12</option>
-                            <option value="WTG 13">WTG 13</option>
-                            <option value="WTG 14">WTG 14</option>
-                            <option value="WTG 15">WTG 15</option>
-                            <option value="WTG 16">WTG 16</option>
-                            <option value="WTG 17">WTG 17</option>
-                            <option value="WTG 18">WTG 18</option>
-                            <option value="WTG 19">WTG 19</option>
-                            <option value="WTG 20">WTG 20</option>
-                            <option value="WTG 21">WTG 21</option>
-                            <option value="WTG 22">WTG 22</option>
-                            <option value="WTG 23">WTG 23</option>
-                            <option value="WTG 24">WTG 24</option>
-                            <option value="WTG 25">WTG 25</option>
-                            <option value="WTG 26">WTG 26</option>
-                            <option value="WTG 27">WTG 27</option>
-                            <option value="WTG 28">WTG 28</option>
-                            <option value="WTG 29">WTG 29</option>
-                            <option value="WTG 30">WTG 30</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -330,6 +306,27 @@ def index():
         let currentUser = null;
         let currentView = 'pendientes';
         let tasks = [];
+        let debugMode = false; // Cambiar a true para ver debug info
+        
+        function debugLog(message, data = null) {
+            if (debugMode) {
+                console.log(message, data);
+                const debugDiv = document.getElementById('debugInfo');
+                debugDiv.style.display = 'block';
+                debugDiv.innerHTML += '<br>' + message + (data ? ': ' + JSON.stringify(data) : '');
+            }
+        }
+        
+        // Generar opciones de turbinas
+        function generateTurbineOptions() {
+            const select = document.getElementById('taskTurbine');
+            for (let i = 1; i <= 30; i++) {
+                const option = document.createElement('option');
+                option.value = `WTG ${i.toString().padStart(2, '0')}`;
+                option.textContent = `WTG ${i.toString().padStart(2, '0')}`;
+                select.appendChild(option);
+            }
+        }
         
         function selectRole(role) {
             currentUser = role;
@@ -348,6 +345,7 @@ def index():
         
         function login() {
             const password = document.getElementById('passwordInput').value;
+            debugLog('Intentando login', { user: currentUser, password: password.length + ' chars' });
             
             fetch('/api/login', {
                 method: 'POST',
@@ -356,6 +354,7 @@ def index():
             })
             .then(response => response.json())
             .then(data => {
+                debugLog('Respuesta login', data);
                 if (data.success) {
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('mainApp').style.display = 'block';
@@ -366,11 +365,16 @@ def index():
                         document.getElementById('createTaskBtn').style.display = 'block';
                     }
                     
+                    generateTurbineOptions();
                     loadTasks();
                 } else {
                     alert('Contraseña incorrecta');
                     document.getElementById('passwordInput').value = '';
                 }
+            })
+            .catch(error => {
+                console.error('Error en login:', error);
+                alert('Error de conexión');
             });
         }
         
@@ -385,17 +389,21 @@ def index():
         }
         
         function loadTasks() {
-            console.log('Cargando tareas...');
+            debugLog('Cargando tareas...');
             fetch('/api/tasks')
-            .then(response => response.json())
+            .then(response => {
+                debugLog('Status de respuesta', response.status);
+                return response.json();
+            })
             .then(data => {
-                console.log('Tareas recibidas:', data);
-                tasks = data;
+                debugLog('Tareas recibidas del servidor', data);
+                tasks = data || [];
                 updateStats();
                 displayTasks();
             })
             .catch(error => {
                 console.error('Error cargando tareas:', error);
+                debugLog('Error cargando tareas', error.message);
             });
         }
         
@@ -404,7 +412,7 @@ def index():
             const progreso = tasks.filter(t => t.status === 'en-progreso').length;
             const completadas = tasks.filter(t => t.status === 'completada' && !t.is_old).length;
             
-            console.log('Estadísticas:', { pendientes, progreso, completadas });
+            debugLog('Estadísticas calculadas', { pendientes, progreso, completadas, totalTasks: tasks.length });
             
             document.getElementById('statPendientes').textContent = pendientes;
             document.getElementById('statProgreso').textContent = progreso;
@@ -437,13 +445,15 @@ def index():
             container.innerHTML = '';
             
             const filteredTasks = getFilteredTasks();
+            debugLog('Tareas filtradas para mostrar', { view: currentView, count: filteredTasks.length, tasks: filteredTasks });
             
             if (filteredTasks.length === 0) {
                 container.innerHTML = '<p style="text-align: center; color: #6B7280; padding: 40px;">No hay tareas en esta sección</p>';
                 return;
             }
             
-            filteredTasks.forEach(task => {
+            filteredTasks.forEach((task, index) => {
+                debugLog(`Creando card para tarea ${index}`, task);
                 const taskDiv = createTaskCard(task);
                 container.appendChild(taskDiv);
             });
@@ -523,31 +533,43 @@ def index():
         function createTask(event) {
             event.preventDefault();
             
-            const title = document.getElementById('taskTitle').value;
-            const description = document.getElementById('taskDescription').value;
+            const title = document.getElementById('taskTitle').value.trim();
+            const description = document.getElementById('taskDescription').value.trim();
             const turbine = document.getElementById('taskTurbine').value;
             const priority = document.getElementById('taskPriority').value;
             
-            console.log('Enviando tarea:', { title, description, turbine, priority });
+            debugLog('Creando tarea', { title, description, turbine, priority });
+            
+            if (!title || !description) {
+                alert('Por favor completa título y descripción');
+                return;
+            }
             
             fetch('/api/tasks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title, description, turbine, priority })
             })
-            .then(response => response.json())
+            .then(response => {
+                debugLog('Status respuesta crear tarea', response.status);
+                return response.json();
+            })
             .then(data => {
-                console.log('Respuesta del servidor:', data);
+                debugLog('Respuesta crear tarea', data);
                 if (data.success) {
                     closeCreateModal();
+                    
                     // Cambiar a vista de pendientes
                     currentView = 'pendientes';
                     document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
                     document.querySelector('.tab[onclick*="pendientes"]').classList.add('active');
                     document.getElementById('sectionTitle').textContent = 'Tareas Pendientes';
                     
-                    // Recargar tareas
-                    loadTasks();
+                    // Recargar tareas después de un pequeño delay
+                    setTimeout(() => {
+                        loadTasks();
+                    }, 500);
+                    
                     alert('¡Tarea creada correctamente!');
                 } else {
                     alert('Error al crear la tarea: ' + (data.error || 'Error desconocido'));
@@ -555,11 +577,14 @@ def index():
             })
             .catch(error => {
                 console.error('Error:', error);
+                debugLog('Error crear tarea', error.message);
                 alert('Error de conexión al crear la tarea');
             });
         }
         
         function updateTaskStatus(taskId, newStatus) {
+            debugLog('Actualizando estado tarea', { taskId, newStatus });
+            
             fetch(`/api/tasks/${taskId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -567,15 +592,20 @@ def index():
             })
             .then(response => response.json())
             .then(data => {
+                debugLog('Respuesta actualizar estado', data);
                 if (data.success) {
                     loadTasks();
                     alert(`Tarea marcada como ${newStatus}`);
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
             });
         }
         
         function uploadEvidence(taskId) {
             const filename = `evidencia_${taskId}_${new Date().toISOString().slice(0,10)}.jpg`;
+            debugLog('Subiendo evidencia', { taskId, filename });
             
             fetch(`/api/tasks/${taskId}`, {
                 method: 'PUT',
@@ -584,22 +614,32 @@ def index():
             })
             .then(response => response.json())
             .then(data => {
+                debugLog('Respuesta subir evidencia', data);
                 if (data.success) {
                     loadTasks();
                     alert('¡Evidencia subida y tarea completada!');
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
             });
         }
         
         function deleteTask(taskId) {
             if (confirm('¿Estás seguro de eliminar esta tarea?')) {
+                debugLog('Eliminando tarea', taskId);
+                
                 fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
                 .then(response => response.json())
                 .then(data => {
+                    debugLog('Respuesta eliminar tarea', data);
                     if (data.success) {
                         loadTasks();
                         alert('Tarea eliminada correctamente');
                     }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
                 });
             }
         }
@@ -628,118 +668,21 @@ def index():
 @app.route('/api/login', methods=['POST'])
 def login_api():
     """Endpoint para login"""
-    data = request.json
-    role = data.get('role')
-    password = data.get('password')
-    
-    if role in PASSWORDS and PASSWORDS[role] == password:
-        session['authenticated'] = True
-        session['role'] = role
-        return jsonify({'success': True, 'role': role})
-    else:
-        return jsonify({'success': False, 'message': 'Contraseña incorrecta'})
-
-@app.route('/api/logout', methods=['POST'])
-def logout_api():
-    """Endpoint para logout"""
-    session.clear()
-    return jsonify({'success': True})
-
-@app.route('/api/tasks', methods=['GET'])
-def get_tasks_api():
-    """Obtener todas las tareas"""
-    if not session.get('authenticated'):
-        return jsonify({'error': 'No autenticado'}), 401
-    
-    tasks = load_tasks()
-    
-    # Agregar información de si la tarea es antigua
-    for task in tasks:
-        task['is_old'] = is_older_than_30_days(task.get('completed_at'))
-    
-    return jsonify(tasks)
-
-@app.route('/api/tasks', methods=['POST'])
-def create_task_api():
-    """Crear nueva tarea"""
-    if not session.get('authenticated') or session.get('role') != 'admin':
-        return jsonify({'error': 'No autorizado'}), 403
-    
-    data = request.json
-    
-    if not data.get('title') or not data.get('description'):
-        return jsonify({'error': 'Título y descripción son obligatorios'}), 400
-    
-    tasks = load_tasks()
-    
-    # Generar ID único basado en timestamp
-    import time
-    new_id = int(time.time() * 1000)  # Usar timestamp en milisegundos
-    
-    new_task = {
-        'id': new_id,
-        'title': data['title'],
-        'description': data['description'],
-        'turbine': data.get('turbine', ''),
-        'priority': data.get('priority', 'media'),
-        'status': 'pendiente',
-        'evidence': None,
-        'created_at': datetime.now().strftime('%Y-%m-%d'),
-        'completed_at': None,
-        'is_old': False
-    }
-    
-    tasks.append(new_task)
-    save_tasks(tasks)
-    
-    print(f"DEBUG: Tarea creada - ID: {new_id}, Título: {data['title']}")
-    print(f"DEBUG: Total tareas después de crear: {len(tasks)}")
-    
-    return jsonify({'success': True, 'task_id': new_id, 'task': new_task})
-
-@app.route('/api/tasks/<int:task_id>', methods=['PUT'])
-def update_task_api(task_id):
-    """Actualizar tarea"""
-    if not session.get('authenticated'):
-        return jsonify({'error': 'No autenticado'}), 401
-    
-    data = request.json
-    tasks = load_tasks()
-    
-    for task in tasks:
-        if task['id'] == task_id:
-            if 'status' in data:
-                task['status'] = data['status']
-                if data['status'] == 'completada':
-                    task['completed_at'] = datetime.now().strftime('%Y-%m-%d')
-            
-            if 'evidence' in data:
-                task['evidence'] = data['evidence']
-                task['status'] = 'completada'
-                task['completed_at'] = datetime.now().strftime('%Y-%m-%d')
-            
-            break
-    
-    save_tasks(tasks)
-    return jsonify({'success': True})
-
-@app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
-def delete_task_api(task_id):
-    """Eliminar tarea"""
-    if not session.get('authenticated') or session.get('role') != 'admin':
-        return jsonify({'error': 'No autorizado'}), 403
-    
-    tasks = load_tasks()
-    tasks = [task for task in tasks if task['id'] != task_id]
-    save_tasks(tasks)
-    
-    return jsonify({'success': True})
-
-if __name__ == '__main__':
-    print("🌪️ Iniciando servidor del Parque Eólico...")
-    print("📱 Acceso local: http://localhost:5000")
-    print("📱 Para celulares: http://TU_IP:5000")
-    print("⚠️  Presiona Ctrl+C para detener")
-    
-    # Ejecutar servidor
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    try:
+        data = request.json
+        role = data.get('role')
+        password = data.get('password')
+        
+        print(f"DEBUG LOGIN: role={role}, password_length={len(password) if password else 0}")
+        
+        if role in PASSWORDS and PASSWORDS[role] == password:
+            session['authenticated'] = True
+            session['role'] = role
+            print(f"DEBUG LOGIN: Success for {role}")
+            return jsonify({'success': True, 'role': role})
+        else:
+            print(f"DEBUG LOGIN: Failed for {role}")
+            return jsonify({'success': False, 'message': 'Contraseña incorrecta'})
+    except Exception as e:
+        print(f"DEBUG LOGIN ERROR: {str(e)}")
+        return jsonify({'success': False, 'message': 'Error en login'})
