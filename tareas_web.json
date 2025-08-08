@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1,
+    "title": "prueba",
+    "description": "prueba\n",
+    "turbine": "WTG 15",
+    "priority": "media",
+    "status": "pendiente",
+    "evidence": null,
+    "created_at": "2025-08-08",
+    "completed_at": null
+  }
+]
