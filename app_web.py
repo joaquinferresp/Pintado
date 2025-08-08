@@ -385,12 +385,17 @@ def index():
         }
         
         function loadTasks() {
+            console.log('Cargando tareas...');
             fetch('/api/tasks')
             .then(response => response.json())
             .then(data => {
+                console.log('Tareas recibidas:', data);
                 tasks = data;
                 updateStats();
                 displayTasks();
+            })
+            .catch(error => {
+                console.error('Error cargando tareas:', error);
             });
         }
         
@@ -398,6 +403,8 @@ def index():
             const pendientes = tasks.filter(t => t.status === 'pendiente').length;
             const progreso = tasks.filter(t => t.status === 'en-progreso').length;
             const completadas = tasks.filter(t => t.status === 'completada' && !t.is_old).length;
+            
+            console.log('Estadísticas:', { pendientes, progreso, completadas });
             
             document.getElementById('statPendientes').textContent = pendientes;
             document.getElementById('statProgreso').textContent = progreso;
@@ -521,6 +528,8 @@ def index():
             const turbine = document.getElementById('taskTurbine').value;
             const priority = document.getElementById('taskPriority').value;
             
+            console.log('Enviando tarea:', { title, description, turbine, priority });
+            
             fetch('/api/tasks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -528,13 +537,25 @@ def index():
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Respuesta del servidor:', data);
                 if (data.success) {
                     closeCreateModal();
+                    // Cambiar a vista de pendientes
+                    currentView = 'pendientes';
+                    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+                    document.querySelector('.tab[onclick*="pendientes"]').classList.add('active');
+                    document.getElementById('sectionTitle').textContent = 'Tareas Pendientes';
+                    
+                    // Recargar tareas
                     loadTasks();
                     alert('¡Tarea creada correctamente!');
                 } else {
-                    alert('Error al crear la tarea');
+                    alert('Error al crear la tarea: ' + (data.error || 'Error desconocido'));
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión al crear la tarea');
             });
         }
         
@@ -651,8 +672,12 @@ def create_task_api():
     
     tasks = load_tasks()
     
+    # Generar ID único basado en timestamp
+    import time
+    new_id = int(time.time() * 1000)  # Usar timestamp en milisegundos
+    
     new_task = {
-        'id': len(tasks) + 1,
+        'id': new_id,
         'title': data['title'],
         'description': data['description'],
         'turbine': data.get('turbine', ''),
@@ -660,13 +685,17 @@ def create_task_api():
         'status': 'pendiente',
         'evidence': None,
         'created_at': datetime.now().strftime('%Y-%m-%d'),
-        'completed_at': None
+        'completed_at': None,
+        'is_old': False
     }
     
     tasks.append(new_task)
     save_tasks(tasks)
     
-    return jsonify({'success': True, 'task_id': new_task['id']})
+    print(f"DEBUG: Tarea creada - ID: {new_id}, Título: {data['title']}")
+    print(f"DEBUG: Total tareas después de crear: {len(tasks)}")
+    
+    return jsonify({'success': True, 'task_id': new_id, 'task': new_task})
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 def update_task_api(task_id):
